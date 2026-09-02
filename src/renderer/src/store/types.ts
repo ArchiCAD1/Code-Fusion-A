@@ -14,6 +14,7 @@ import type { JiraSlice } from './slices/jira'
 import type { EditorSlice } from './slices/editor'
 import type { StatsSlice } from './slices/stats'
 import type { MemorySlice } from './slices/memory'
+import type { NativeIntelligenceSlice } from './slices/native-intelligence'
 import type { WorkspaceSpaceSlice } from './slices/workspace-space'
 import type {
   ClaudeUsageSlice,
@@ -60,6 +61,7 @@ export type AppState = RepoSlice &
   EditorSlice &
   StatsSlice &
   MemorySlice &
+  NativeIntelligenceSlice &
   WorkspaceSpaceSlice &
   ClaudeUsageSlice &
   CodexUsageSlice &
