@@ -1,22 +1,36 @@
+import { byteLength } from 'node:buffer'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
-import type {
-  OrchestrationLedgerAggregateType,
-  OrchestrationLedgerEventInput,
-  OrchestrationLedgerReadOptions,
-  OrchestrationLedgerRecord,
-  OrchestrationLedgerStore
+import {
+  ORCHESTRATION_LEDGER_AGGREGATE_TYPES,
+  ORCHESTRATION_LEDGER_SCHEMA_VERSION,
+  type JsonValue,
+  type OrchestrationLedgerActorKind,
+  type OrchestrationLedgerAggregateType,
+  type OrchestrationLedgerEventInput,
+  type OrchestrationLedgerReadOptions,
+  type OrchestrationLedgerRecord,
+  type OrchestrationLedgerStore
 } from '../../../shared/code-fusion/orchestration-ledger'
-import { ORCHESTRATION_LEDGER_SCHEMA_VERSION } from '../../../shared/code-fusion/orchestration-ledger'
 import { hardenExistingSecureFile } from '../../../shared/secure-file'
 
 const DEFAULT_READ_LIMIT = 100
 const MAX_READ_LIMIT = 1_000
+const MAX_BATCH_SIZE = 10_000
 const MAX_ID_LENGTH = 512
 const MAX_EVENT_TYPE_LENGTH = 256
 const MAX_SOURCE_LENGTH = 256
+const MAX_PAYLOAD_BYTES = 2 * 1024 * 1024
+const MAX_PAYLOAD_DEPTH = 64
+const AGGREGATE_TYPES = new Set<string>(ORCHESTRATION_LEDGER_AGGREGATE_TYPES)
+const ACTOR_KINDS = new Set<OrchestrationLedgerActorKind>([
+  'human',
+  'agent',
+  'system',
+  'external'
+])
 
 type LedgerRow = {
   sequence: number
@@ -27,11 +41,7 @@ type LedgerRow = {
   aggregate_id: string
   event_type: string
   payload_json: string
-  actor_kind: OrchestrationLedgerEventInput['actor'] extends infer T
-    ? T extends { kind: infer K }
-      ? K | null
-      : never
-    : never
+  actor_kind: OrchestrationLedgerActorKind | null
   actor_id: string | null
   source: string | null
   correlation_id: string | null
@@ -59,8 +69,14 @@ export class SqliteOrchestrationLedgerStore implements OrchestrationLedgerStore 
       mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
     }
     this.database = new DatabaseSync(path, { timeout: 5_000 })
-    this.configureDatabase(path)
-    this.migrate()
+    try {
+      this.configureDatabase(path)
+      this.migrate()
+    } catch (error) {
+      this.database.close()
+      this.closed = true
+      throw error
+    }
   }
 
   getSchemaVersion(): number {
@@ -94,6 +110,12 @@ export class SqliteOrchestrationLedgerStore implements OrchestrationLedgerStore 
     if (events.length === 0) {
       return []
     }
+    if (events.length > MAX_BATCH_SIZE) {
+      throw new Error(`Code Fusion ledger batch must not exceed ${MAX_BATCH_SIZE} events`)
+    }
+
+    // Validate and serialize the complete batch before opening a transaction so malformed evidence
+    // cannot leave a partial write or hold a database write lock while validation runs.
     const serialized = events.map(serializeEvent)
     const insert = this.database.prepare(`
       INSERT INTO code_fusion_ledger_events (
@@ -155,6 +177,7 @@ export class SqliteOrchestrationLedgerStore implements OrchestrationLedgerStore 
     options: OrchestrationLedgerReadOptions = {}
   ): readonly OrchestrationLedgerRecord[] {
     this.assertOpen()
+    const normalizedAggregateType = requireAggregateType(aggregateType)
     const normalizedAggregateId = requireText('aggregateId', aggregateId, MAX_ID_LENGTH)
     const { afterSequence, limit } = normalizeReadOptions(options)
     const rows = this.database
@@ -164,7 +187,7 @@ export class SqliteOrchestrationLedgerStore implements OrchestrationLedgerStore 
         ORDER BY sequence ASC
         LIMIT ?
       `)
-      .all(aggregateType, normalizedAggregateId, afterSequence, limit) as unknown as LedgerRow[]
+      .all(normalizedAggregateType, normalizedAggregateId, afterSequence, limit) as unknown as LedgerRow[]
     return rows.map(rowToRecord)
   }
 
@@ -200,6 +223,8 @@ export class SqliteOrchestrationLedgerStore implements OrchestrationLedgerStore 
     if (path !== ':memory:') {
       this.database.exec('PRAGMA journal_mode = WAL')
       this.database.exec('PRAGMA synchronous = FULL')
+      // Reuse Orca's existing cross-platform profile-path hardening instead of inventing a second
+      // ACL/permission implementation for Code Fusion.
       hardenExistingSecureFile(path)
     }
   }
@@ -259,26 +284,40 @@ export class SqliteOrchestrationLedgerStore implements OrchestrationLedgerStore 
 }
 
 function serializeEvent(event: OrchestrationLedgerEventInput): SerializedEvent {
+  const projectId = optionalText('projectId', event.projectId, MAX_ID_LENGTH)
+  const source = optionalText('source', event.source, MAX_SOURCE_LENGTH)
+  const correlationId = optionalText('correlationId', event.correlationId, MAX_ID_LENGTH)
+  const causationId = optionalText('causationId', event.causationId, MAX_ID_LENGTH)
+  const actorId = optionalText('actor.id', event.actor?.id, MAX_ID_LENGTH)
+  assertJsonValue(event.payload)
+
   const normalized: OrchestrationLedgerEventInput = {
-    ...event,
     eventId: requireText('eventId', event.eventId, MAX_ID_LENGTH),
     occurredAt: requireIsoDate(event.occurredAt),
-    projectId: optionalText('projectId', event.projectId, MAX_ID_LENGTH),
+    aggregateType: requireAggregateType(event.aggregateType),
     aggregateId: requireText('aggregateId', event.aggregateId, MAX_ID_LENGTH),
     eventType: requireText('eventType', event.eventType, MAX_EVENT_TYPE_LENGTH),
-    source: optionalText('source', event.source, MAX_SOURCE_LENGTH),
-    correlationId: optionalText('correlationId', event.correlationId, MAX_ID_LENGTH),
-    causationId: optionalText('causationId', event.causationId, MAX_ID_LENGTH),
-    actor: event.actor
+    payload: event.payload,
+    ...(projectId ? { projectId } : {}),
+    ...(event.actor
       ? {
-          kind: event.actor.kind,
-          id: optionalText('actor.id', event.actor.id, MAX_ID_LENGTH)
+          actor: {
+            kind: requireActorKind(event.actor.kind),
+            ...(actorId ? { id: actorId } : {})
+          }
         }
-      : undefined
+      : {}),
+    ...(source ? { source } : {}),
+    ...(correlationId ? { correlationId } : {}),
+    ...(causationId ? { causationId } : {})
   }
+
   const payloadJson = JSON.stringify(normalized.payload)
   if (payloadJson === undefined) {
     throw new Error('Code Fusion ledger payload must be JSON serializable')
+  }
+  if (byteLength(payloadJson, 'utf8') > MAX_PAYLOAD_BYTES) {
+    throw new Error(`Code Fusion ledger payload must not exceed ${MAX_PAYLOAD_BYTES} bytes`)
   }
   return { event: normalized, payloadJson }
 }
@@ -326,7 +365,24 @@ function requireIsoDate(value: string): string {
   return normalized
 }
 
+function requireAggregateType(value: OrchestrationLedgerAggregateType): OrchestrationLedgerAggregateType {
+  if (!AGGREGATE_TYPES.has(value)) {
+    throw new Error(`Unsupported Code Fusion ledger aggregate type: ${String(value)}`)
+  }
+  return value
+}
+
+function requireActorKind(value: OrchestrationLedgerActorKind): OrchestrationLedgerActorKind {
+  if (!ACTOR_KINDS.has(value)) {
+    throw new Error(`Unsupported Code Fusion ledger actor kind: ${String(value)}`)
+  }
+  return value
+}
+
 function requireText(name: string, value: string, maxLength: number): string {
+  if (typeof value !== 'string') {
+    throw new Error(`Code Fusion ledger ${name} must be text`)
+  }
   const normalized = value.trim()
   if (!normalized || normalized.length > maxLength) {
     throw new Error(`Code Fusion ledger ${name} must be 1-${maxLength} characters`)
@@ -343,4 +399,47 @@ function optionalText(
     return undefined
   }
   return requireText(name, value, maxLength)
+}
+
+function assertJsonValue(
+  value: unknown,
+  depth = 0,
+  ancestors: Set<object> = new Set()
+): asserts value is JsonValue {
+  if (depth > MAX_PAYLOAD_DEPTH) {
+    throw new Error(`Code Fusion ledger payload exceeds maximum depth ${MAX_PAYLOAD_DEPTH}`)
+  }
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      throw new Error('Code Fusion ledger payload numbers must be finite')
+    }
+    return
+  }
+  if (typeof value !== 'object') {
+    throw new Error('Code Fusion ledger payload must contain JSON values only')
+  }
+  if (ancestors.has(value)) {
+    throw new Error('Code Fusion ledger payload must not contain cycles')
+  }
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        assertJsonValue(item, depth + 1, ancestors)
+      }
+      return
+    }
+    const prototype = Object.getPrototypeOf(value)
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new Error('Code Fusion ledger payload objects must be plain JSON records')
+    }
+    for (const item of Object.values(value as Record<string, unknown>)) {
+      assertJsonValue(item, depth + 1, ancestors)
+    }
+  } finally {
+    ancestors.delete(value)
+  }
 }
