@@ -12,13 +12,13 @@ The certification path is:
 Nativ-compatible runtime
   -> loopback /v1/models
   -> NativNativeIntelligenceProvider
-  -> readNativeIntelligenceSnapshot
-  -> nativeIntelligence:getSnapshot IPC
+  -> readNativeIntelligenceSnapshot / runNativeIntelligenceReadCertification
+  -> nativeIntelligence:* IPC
   -> preload NativeIntelligenceApi
-  -> renderer window.api.nativeIntelligence.getSnapshot()
+  -> renderer window.api.nativeIntelligence
 ```
 
-The native provider and renderer boundary are intentionally different in capability. The provider contract reserves future lifecycle operations, while the renderer currently receives only a read-only snapshot.
+The native provider and renderer boundary are intentionally different in capability. The provider contract reserves future lifecycle operations, while the renderer currently receives only read-only snapshot and certification operations.
 
 ## Evidence classification
 
@@ -124,20 +124,30 @@ Pass criteria:
 
 Run the stop/start recovery sequence at least three times for the first certification candidate.
 
-## Gate F — Read-only certification evidence
+## Gate F — Mounted read-only certification report
 
-Code Fusion includes `runNativeIntelligenceReadCertification(...)` as a reusable evidence evaluator. When a mounted Mac-side runner invokes this evaluator against the production provider, preserve the returned report with:
+With the real runtime ready and the same Code Fusion build mounted, evaluate:
+
+```js
+await window.api.nativeIntelligence.runReadCertification()
+```
+
+Pass criteria:
+
+- `result === "pass"`;
+- the `runtime-ready` check passes;
+- the `model-inventory` check passes;
+- `runtimeName`, `protocolVersion`, timestamps, and model count match the mounted environment;
+- no endpoint or credential value appears in the report.
+
+Preserve the returned report with:
 
 - candidate commit SHA;
 - macOS version and hardware class;
 - runtime/donor version or commit;
-- start/completion timestamps;
-- runtime-ready check;
-- model-inventory check;
-- sanitized model count;
-- exact PASS/FAIL result.
+- exact sanitized report output.
 
-A passing evaluator report becomes `VERIFIED-RUNTIME` only when the evidence proves it ran against the mounted macOS Code Fusion + real Nativ runtime path.
+A passing report becomes `VERIFIED-RUNTIME` only when the surrounding evidence proves it ran against the mounted macOS Code Fusion + real Nativ runtime path.
 
 ## Required negative checks
 
@@ -156,7 +166,7 @@ The first runtime certification must also prove:
 The first Models / Runtime UI may move from `GATED` to implementation review only after:
 
 - Gate A is `VERIFIED-AUTOMATED` + `VERIFIED-BUILD`;
-- Gates B-E are `VERIFIED-RUNTIME`;
+- Gates B-F are `VERIFIED-RUNTIME`;
 - secrets remain host-side;
 - PR review confirms the renderer boundary is still read-only;
 - any defects discovered during mounted testing have regression coverage.

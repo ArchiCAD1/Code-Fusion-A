@@ -4,7 +4,8 @@ import type {
 } from './native-intelligence-contract'
 
 export const NATIVE_INTELLIGENCE_IPC_CHANNELS = {
-  getSnapshot: 'nativeIntelligence:getSnapshot'
+  getSnapshot: 'nativeIntelligence:getSnapshot',
+  runReadCertification: 'nativeIntelligence:runReadCertification'
 } as const
 
 /**

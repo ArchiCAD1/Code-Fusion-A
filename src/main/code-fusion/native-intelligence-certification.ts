@@ -1,26 +1,8 @@
+import type { NativeIntelligenceProvider } from '../../shared/code-fusion/native-intelligence-contract'
 import type {
-  NativeIntelligenceProtocolVersion,
-  NativeIntelligenceProvider
-} from '../../shared/code-fusion/native-intelligence-contract'
-
-export type NativeIntelligenceCertificationCheckId = 'runtime-ready' | 'model-inventory'
-export type NativeIntelligenceCertificationCheckStatus = 'pass' | 'fail'
-
-export type NativeIntelligenceCertificationCheck = {
-  id: NativeIntelligenceCertificationCheckId
-  status: NativeIntelligenceCertificationCheckStatus
-  detail: string
-}
-
-export type NativeIntelligenceCertificationReport = {
-  result: NativeIntelligenceCertificationCheckStatus
-  startedAt: string
-  completedAt: string
-  runtimeName: string | null
-  protocolVersion: NativeIntelligenceProtocolVersion | null
-  modelCount: number | null
-  checks: readonly NativeIntelligenceCertificationCheck[]
-}
+  NativeIntelligenceCertificationCheck,
+  NativeIntelligenceCertificationReport
+} from '../../shared/code-fusion/native-intelligence-certification'
 
 export type NativeIntelligenceCertificationClock = () => Date
 
@@ -38,7 +20,7 @@ export async function runNativeIntelligenceReadCertification(
 ): Promise<NativeIntelligenceCertificationReport> {
   const startedAt = clock().toISOString()
   let runtimeName: string | null = null
-  let protocolVersion: NativeIntelligenceProtocolVersion | null = null
+  let protocolVersion: NativeIntelligenceCertificationReport['protocolVersion'] = null
   const checks: NativeIntelligenceCertificationCheck[] = []
 
   try {

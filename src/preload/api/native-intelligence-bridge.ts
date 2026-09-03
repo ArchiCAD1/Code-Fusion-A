@@ -4,5 +4,7 @@ import { NATIVE_INTELLIGENCE_IPC_CHANNELS } from '../../shared/code-fusion/nativ
 import type { PreloadApi } from '../api-types'
 
 export const nativeIntelligenceApi = {
-  getSnapshot: () => ipcRenderer.invoke(NATIVE_INTELLIGENCE_IPC_CHANNELS.getSnapshot)
+  getSnapshot: () => ipcRenderer.invoke(NATIVE_INTELLIGENCE_IPC_CHANNELS.getSnapshot),
+  runReadCertification: () =>
+    ipcRenderer.invoke(NATIVE_INTELLIGENCE_IPC_CHANNELS.runReadCertification)
 } satisfies PreloadApi['nativeIntelligence']
