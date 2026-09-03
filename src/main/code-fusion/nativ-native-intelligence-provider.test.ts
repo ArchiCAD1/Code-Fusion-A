@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import type { MainHttpClient } from '../network/http-client'
+import { setMainHttpClient, type MainHttpClient } from '../network/http-client'
 import { NativNativeIntelligenceProvider } from './nativ-native-intelligence-provider'
 
 type RecordedRequest = {
@@ -24,6 +24,10 @@ function makeHttpClient(
   }
 }
 
+afterEach(() => {
+  setMainHttpClient(null)
+})
+
 describe('NativNativeIntelligenceProvider', () => {
   it('uses the public model endpoint as a read-only readiness probe', async () => {
     const { client, requests } = makeHttpClient(async () => Response.json({ data: [] }))
@@ -38,6 +42,20 @@ describe('NativNativeIntelligenceProvider', () => {
     expect(requests).toHaveLength(1)
     expect(requests[0]?.url).toBe('http://127.0.0.1:8080/v1/models')
     expect(requests[0]?.init?.method).toBe('GET')
+  })
+
+  it('resolves the active host HTTP client at request time when no override is injected', async () => {
+    const first = makeHttpClient(async () => Response.json({ data: [{ id: 'old/model' }] }))
+    const second = makeHttpClient(async () => Response.json({ data: [{ id: 'current/model' }] }))
+    setMainHttpClient(first.client)
+    const provider = new NativNativeIntelligenceProvider()
+
+    setMainHttpClient(second.client)
+    const models = await provider.listModels()
+
+    expect(first.requests).toHaveLength(0)
+    expect(second.requests).toHaveLength(1)
+    expect(models.map((model) => model.id)).toEqual(['current/model'])
   })
 
   it('applies an optional bearer token without putting it in the URL', async () => {

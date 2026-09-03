@@ -10,6 +10,7 @@ import { browserManager } from '../browser/browser-manager'
 import { configureBrowserClientPageAutomationRuntime } from '../browser/browser-client-page-automation-runtime'
 import { BrowserClientPageCommandError } from '../browser/browser-client-page-command-failure'
 import { startPreGoneProcessMetricsSampling } from '../crash-reporting/process-gone-diagnostics'
+import { registerNativeIntelligenceIpcHandlers } from '../code-fusion/native-intelligence-ipc'
 import { recordProcessGoneCrash } from './main-window-lifecycle-flags'
 import { handleGpuChildCrash } from './gpu-lifecycle'
 import { isGpuFallbackCrashCandidate } from '../crash-reporting/gpu-crash-fallback-decision'
@@ -41,6 +42,8 @@ export async function initializeReadyRuntimeServices(): Promise<void> {
   }
   initializeMainProcessObservers()
   initializeMainProcessAccountServices()
+  // Register after ready foundation/proxy setup so the lazy native provider inherits the app network port.
+  registerNativeIntelligenceIpcHandlers()
   const runtime = initializeMainProcessRuntime()
   initializeMainProcessAutomations()
   configureRuntimeServices(runtime)

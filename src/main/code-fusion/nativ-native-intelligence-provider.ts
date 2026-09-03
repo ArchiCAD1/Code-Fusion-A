@@ -41,13 +41,13 @@ export class NativNativeIntelligenceProvider implements NativeIntelligenceProvid
   private readonly baseURL: URL
   private readonly apiKey: string | undefined
   private readonly timeoutMs: number
-  private readonly httpClient: MainHttpClient
+  private readonly httpClientOverride: MainHttpClient | undefined
 
   constructor(options: NativNativeIntelligenceProviderOptions = {}) {
     this.baseURL = normalizeLoopbackBaseURL(options.baseURL ?? DEFAULT_NATIV_BASE_URL)
     this.apiKey = normalizeOptionalSecret(options.apiKey)
     this.timeoutMs = normalizeTimeout(options.timeoutMs)
-    this.httpClient = options.httpClient ?? getMainHttpClient()
+    this.httpClientOverride = options.httpClient
   }
 
   async getHealth(
@@ -112,7 +112,10 @@ export class NativNativeIntelligenceProvider implements NativeIntelligenceProvid
 
     const requestAbort = createRequestAbort(options.signal, this.timeoutMs)
     try {
-      const response = await this.httpClient.fetch(requestURL, {
+      // Resolve the host port at request time so a provider created before Electron's
+      // Chromium-backed client is installed cannot retain the Node fallback forever.
+      const httpClient = this.httpClientOverride ?? getMainHttpClient()
+      const response = await httpClient.fetch(requestURL, {
         method: 'GET',
         headers,
         cache: 'no-store',
