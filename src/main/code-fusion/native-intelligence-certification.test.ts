@@ -32,8 +32,12 @@ const MODELS: readonly NativeModelDescriptor[] = [
 ]
 
 function clock(...timestamps: string[]): () => Date {
+  const fallback = timestamps.at(-1)
+  if (!fallback) {
+    throw new Error('clock requires at least one timestamp')
+  }
   const values = [...timestamps]
-  return () => new Date(values.shift() ?? timestamps.at(-1))
+  return () => new Date(values.shift() ?? fallback)
 }
 
 function providerWith(
