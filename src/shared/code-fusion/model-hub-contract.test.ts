@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   MODEL_HUB_DEFAULT_PAGE_LIMIT,
+  MODEL_HUB_MAX_ERROR_MESSAGE_LENGTH,
   availableModelHubDownloadActions,
   createModelHubDownloadRequest,
   isTerminalModelHubDownloadPhase,
@@ -91,27 +92,36 @@ describe('Code Fusion Model Hub contract', () => {
     expect(isTerminalModelHubDownloadPhase('finalizing')).toBe(false)
   })
 
-  it('derives legal download controls from the current phase', () => {
+  it('derives legal download controls from phase and retryability', () => {
     expect(availableModelHubDownloadActions('downloading')).toEqual(['pause', 'cancel'])
     expect(availableModelHubDownloadActions('paused')).toEqual(['resume', 'cancel'])
     expect(availableModelHubDownloadActions('retrying')).toEqual(['cancel'])
-    expect(availableModelHubDownloadActions('failed')).toEqual(['retry'])
+    expect(availableModelHubDownloadActions('failed', true)).toEqual(['retry'])
+    expect(availableModelHubDownloadActions('failed', false)).toEqual([])
     expect(availableModelHubDownloadActions('completed')).toEqual([])
   })
 
-  it('derives bounded progress only from completed and total bytes', () => {
+  it('derives bounded progress only from safe integer byte counts', () => {
     expect(modelHubDownloadFraction({ completedBytes: 25, totalBytes: 100 })).toBe(0.25)
     expect(modelHubDownloadFraction({ completedBytes: 150, totalBytes: 100 })).toBe(1)
     expect(modelHubDownloadFraction({ completedBytes: -1, totalBytes: 100 })).toBeNull()
+    expect(modelHubDownloadFraction({ completedBytes: 1.5, totalBytes: 100 })).toBeNull()
+    expect(modelHubDownloadFraction({ completedBytes: 10, totalBytes: 100.5 })).toBeNull()
     expect(modelHubDownloadFraction({ completedBytes: 10 })).toBeNull()
     expect(modelHubDownloadFraction({ completedBytes: 10, totalBytes: 0 })).toBeNull()
   })
 
-  it('redacts credential-like values from renderer-safe errors', () => {
+  it('redacts credential-like values before applying the public length bound', () => {
     expect(
       sanitizeModelHubErrorMessage(
         new Error('Bearer secret token=abc api_key=xyz authorization=raw')
       )
     ).toBe('Bearer [redacted] token=[redacted] api_key=[redacted] authorization=[redacted]')
+
+    const sanitized = sanitizeModelHubErrorMessage(
+      `${'x'.repeat(MODEL_HUB_MAX_ERROR_MESSAGE_LENGTH - 20)} token=super-secret`
+    )
+    expect(sanitized).not.toContain('super-secret')
+    expect(sanitized.length).toBeLessThanOrEqual(MODEL_HUB_MAX_ERROR_MESSAGE_LENGTH)
   })
 })

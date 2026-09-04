@@ -32,7 +32,14 @@ export type ModelHubFitAssessment =
   | 'tight'
   | 'exceeds-memory'
 
-export type ModelHubModelState = 'available' | 'installed' | 'loaded' | 'failed'
+export type ModelHubModelState =
+  | 'available'
+  | 'installed'
+  | 'loading'
+  | 'loaded'
+  | 'unloading'
+  | 'removing'
+  | 'failed'
 
 export type ModelHubCatalogQuery = {
   query?: string
@@ -221,7 +228,8 @@ export function isTerminalModelHubDownloadPhase(phase: ModelHubDownloadPhase): b
 }
 
 export function availableModelHubDownloadActions(
-  phase: ModelHubDownloadPhase
+  phase: ModelHubDownloadPhase,
+  retryable = true
 ): readonly ModelHubDownloadAction[] {
   switch (phase) {
     case 'queued':
@@ -234,7 +242,7 @@ export function availableModelHubDownloadActions(
     case 'paused':
       return ['resume', 'cancel']
     case 'failed':
-      return ['retry']
+      return retryable ? ['retry'] : []
     case 'completed':
     case 'cancelled':
       return []
@@ -246,10 +254,10 @@ export function modelHubDownloadFraction(
 ): number | null {
   const { completedBytes, totalBytes } = snapshot
   if (
-    !Number.isFinite(completedBytes) ||
+    !Number.isSafeInteger(completedBytes) ||
     completedBytes < 0 ||
     totalBytes === undefined ||
-    !Number.isFinite(totalBytes) ||
+    !Number.isSafeInteger(totalBytes) ||
     totalBytes <= 0
   ) {
     return null
@@ -260,10 +268,10 @@ export function modelHubDownloadFraction(
 export function sanitizeModelHubErrorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error)
   const normalized = raw.trim() || 'Code Fusion Model Hub operation failed'
-  return normalized
-    .slice(0, MODEL_HUB_MAX_ERROR_MESSAGE_LENGTH)
+  const redacted = normalized
     .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
     .replace(/((?:api[_-]?key|token|authorization)=)[^&\s]+/gi, '$1[redacted]')
+  return redacted.slice(0, MODEL_HUB_MAX_ERROR_MESSAGE_LENGTH)
 }
 
 function normalizeOptionalText(
