@@ -31,6 +31,13 @@ export class OrchestrationLedgerWorkerTimeoutError extends Error {
   }
 }
 
+export class OrchestrationLedgerWorkerProtocolError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'OrchestrationLedgerWorkerProtocolError'
+  }
+}
+
 type PendingRequest = {
   request: OrchestrationLedgerWorkerRequest
   resolve: (value: unknown) => void
@@ -210,7 +217,11 @@ export class OrchestrationLedgerWorkerClient {
       ORCHESTRATION_LEDGER_WORKER_REQUEST_TIMEOUT_MS
     )
     next.timer.unref?.()
-    worker.postMessage(next.request)
+    try {
+      worker.postMessage(next.request)
+    } catch (error) {
+      this.onWorkerFault(toError(error))
+    }
   }
 
   private ensureWorker(): Worker | null {
@@ -239,9 +250,20 @@ export class OrchestrationLedgerWorkerClient {
   }
 
   private onMessage(value: unknown): void {
-    if (!isOrchestrationLedgerWorkerResponse(value)) return
     const pending = this.active
-    if (!pending || pending.request.id !== value.id || pending.request.operation !== value.operation) {
+    if (!pending) return
+
+    if (!isOrchestrationLedgerWorkerResponse(value)) {
+      if (matchesPendingResponseEnvelope(value, pending.request)) {
+        this.onWorkerFault(
+          new OrchestrationLedgerWorkerProtocolError(
+            `Code Fusion orchestration ledger worker returned an invalid ${pending.request.operation} response`
+          )
+        )
+      }
+      return
+    }
+    if (pending.request.id !== value.id || pending.request.operation !== value.operation) {
       return
     }
 
@@ -307,6 +329,19 @@ export class OrchestrationLedgerWorkerClient {
     worker.removeAllListeners()
     void worker.terminate().catch(() => undefined)
   }
+}
+
+function matchesPendingResponseEnvelope(
+  value: unknown,
+  request: OrchestrationLedgerWorkerRequest
+): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const candidate = value as Record<string, unknown>
+  return candidate.id === request.id && candidate.operation === request.operation
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error))
 }
 
 function errorMessage(error: unknown): string {

@@ -2,6 +2,7 @@ import type { Worker } from 'node:worker_threads'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   OrchestrationLedgerWorkerClient,
+  OrchestrationLedgerWorkerProtocolError,
   OrchestrationLedgerWorkerTimeoutError,
   OrchestrationLedgerWorkerUnavailableError
 } from './orchestration-ledger-worker-client'
@@ -15,6 +16,7 @@ import {
 class FakeWorker {
   readonly postedRequests: OrchestrationLedgerWorkerRequest[] = []
   terminated = false
+  postMessageError: Error | null = null
   private readonly listeners = new Map<string, Set<(arg?: unknown) => void>>()
 
   on(event: string, listener: (arg?: unknown) => void): this {
@@ -44,6 +46,11 @@ class FakeWorker {
   }
 
   postMessage(request: OrchestrationLedgerWorkerRequest): void {
+    if (this.postMessageError) {
+      const error = this.postMessageError
+      this.postMessageError = null
+      throw error
+    }
     this.postedRequests.push(request)
   }
 
@@ -173,6 +180,75 @@ describe('OrchestrationLedgerWorkerClient', () => {
     expect(workers).toHaveLength(2)
     workers[1].respond(5)
     await expect(retry).resolves.toBe(5)
+  })
+
+  it('rejects a synchronous postMessage clone failure immediately and can restart', async () => {
+    const workers: FakeWorker[] = []
+    const client = new OrchestrationLedgerWorkerClient({
+      profileStorageDirectory: '/tmp/profile',
+      workerFactory: () => {
+        const worker = new FakeWorker()
+        if (workers.length === 0) {
+          worker.postMessageError = Object.assign(new Error('could not be cloned'), {
+            name: 'DataCloneError'
+          })
+        }
+        workers.push(worker)
+        return worker as unknown as Worker
+      },
+      log() {}
+    })
+
+    await expect(client.getLatestSequence()).rejects.toMatchObject({
+      name: 'DataCloneError',
+      message: 'could not be cloned'
+    })
+    expect(workers[0].terminated).toBe(true)
+    expect(client.getState()).toBe('idle')
+
+    const retry = client.getLatestSequence()
+    expect(workers).toHaveLength(2)
+    workers[1].respond(6)
+    await expect(retry).resolves.toBe(6)
+  })
+
+  it('fails immediately on a malformed response matching the active request', async () => {
+    const workers: FakeWorker[] = []
+    const client = makeClient(workers)
+    const pending = client.getLatestSequence()
+    const request = workers[0].postedRequests.at(-1)
+    if (!request) throw new Error('request not dispatched')
+
+    workers[0].emit('message', {
+      protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
+      id: request.id,
+      operation: request.operation,
+      ok: true,
+      result: 'not-a-sequence'
+    })
+
+    await expect(pending).rejects.toBeInstanceOf(OrchestrationLedgerWorkerProtocolError)
+    expect(workers[0].terminated).toBe(true)
+    expect(client.getState()).toBe('idle')
+  })
+
+  it('ignores unrelated malformed messages and still accepts the matching response', async () => {
+    const workers: FakeWorker[] = []
+    const client = makeClient(workers)
+    const pending = client.getLatestSequence()
+    const request = workers[0].postedRequests.at(-1)
+    if (!request) throw new Error('request not dispatched')
+
+    workers[0].emit('message', {
+      protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
+      id: request.id + 1,
+      operation: request.operation,
+      ok: true,
+      result: 'malformed'
+    })
+    workers[0].respond(7)
+
+    await expect(pending).resolves.toBe(7)
   })
 
   it('times out a stalled worker and rejects the queue', async () => {
