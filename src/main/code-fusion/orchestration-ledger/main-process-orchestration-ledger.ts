@@ -1,13 +1,9 @@
 import {
   OrchestrationLedgerRuntimeRegistry,
   type OrchestrationLedgerProfileShutdownReport,
-  type OrchestrationLedgerRegistryShutdownReport,
-  type OrchestrationLedgerRuntimeOwnerPort
+  type OrchestrationLedgerRegistryShutdownReport
 } from './orchestration-ledger-runtime-registry'
-import type {
-  OrchestrationLedgerRuntimeClient,
-  OrchestrationLedgerShutdownReport
-} from './orchestration-ledger-runtime-owner'
+import type { OrchestrationLedgerRuntimeClient } from './orchestration-ledger-runtime-owner'
 import type { OrchestrationLedgerWorkerClient } from './orchestration-ledger-worker-client'
 
 export type MainProcessOrchestrationLedgerState = 'idle' | 'ready' | 'closing' | 'closed'
@@ -56,10 +52,7 @@ export class MainProcessOrchestrationLedgerController<
     this.createRegistry =
       dependencies.createRegistry ??
       (() =>
-        new OrchestrationLedgerRuntimeRegistry<
-          TClient,
-          OrchestrationLedgerRuntimeOwnerPort<TClient>
-        >() as MainProcessOrchestrationLedgerRegistryPort<TClient>)
+        new OrchestrationLedgerRuntimeRegistry<TClient>() as MainProcessOrchestrationLedgerRegistryPort<TClient>)
   }
 
   getState(): MainProcessOrchestrationLedgerState {
