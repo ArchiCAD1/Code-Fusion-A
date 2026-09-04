@@ -14,8 +14,14 @@ const event = {
   payload: { title: 'Investigate native runtime' }
 }
 
+const record = {
+  ...event,
+  aggregateType: 'task',
+  sequence: 1
+}
+
 describe('orchestration ledger worker protocol', () => {
-  it('accepts the bounded worker data, request and response envelopes', () => {
+  it('accepts the bounded worker data and operation-specific request envelopes', () => {
     expect(isOrchestrationLedgerWorkerData({ profileStorageDirectory: '/tmp/profile' })).toBe(true)
     expect(
       isOrchestrationLedgerWorkerRequest({
@@ -31,15 +37,6 @@ describe('orchestration ledger worker protocol', () => {
         id: 2,
         operation: 'readAggregate',
         payload: { aggregateType: 'task', aggregateId: 'task-1', options: { limit: 20 } }
-      })
-    ).toBe(true)
-    expect(
-      isOrchestrationLedgerWorkerResponse({
-        protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
-        id: 2,
-        operation: 'readAggregate',
-        ok: true,
-        result: []
       })
     ).toBe(true)
   })
@@ -72,7 +69,7 @@ describe('orchestration ledger worker protocol', () => {
     ).toBe(false)
   })
 
-  it('rejects operation-specific payload mismatches', () => {
+  it('rejects operation-specific request payload mismatches', () => {
     expect(
       isOrchestrationLedgerWorkerRequest({
         protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
@@ -86,7 +83,12 @@ describe('orchestration ledger worker protocol', () => {
         protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
         id: 1,
         operation: 'appendCore',
-        payload: { event: { eventId: '', occurredAt: '', aggregateId: '', eventType: '' } }
+        payload: {
+          event: {
+            ...event,
+            eventType: 'task.arbitrary'
+          }
+        }
       })
     ).toBe(false)
     expect(
@@ -103,6 +105,93 @@ describe('orchestration ledger worker protocol', () => {
         id: 1,
         operation: 'readAfter',
         payload: { options: { limit: 0 } }
+      })
+    ).toBe(false)
+  })
+
+  it('accepts operation-specific successful response results', () => {
+    expect(
+      isOrchestrationLedgerWorkerResponse({
+        protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
+        id: 1,
+        operation: 'getSchemaVersion',
+        ok: true,
+        result: 1
+      })
+    ).toBe(true)
+    expect(
+      isOrchestrationLedgerWorkerResponse({
+        protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
+        id: 2,
+        operation: 'getLatestSequence',
+        ok: true,
+        result: 0
+      })
+    ).toBe(true)
+    expect(
+      isOrchestrationLedgerWorkerResponse({
+        protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
+        id: 3,
+        operation: 'appendCore',
+        ok: true,
+        result: record
+      })
+    ).toBe(true)
+    expect(
+      isOrchestrationLedgerWorkerResponse({
+        protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
+        id: 4,
+        operation: 'readProject',
+        ok: true,
+        result: [record]
+      })
+    ).toBe(true)
+    expect(
+      isOrchestrationLedgerWorkerResponse({
+        protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
+        id: 5,
+        operation: 'close',
+        ok: true,
+        result: null
+      })
+    ).toBe(true)
+  })
+
+  it('rejects successful response envelopes with the wrong result type', () => {
+    expect(
+      isOrchestrationLedgerWorkerResponse({
+        protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
+        id: 1,
+        operation: 'getLatestSequence',
+        ok: true,
+        result: '1'
+      })
+    ).toBe(false)
+    expect(
+      isOrchestrationLedgerWorkerResponse({
+        protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
+        id: 2,
+        operation: 'appendCore',
+        ok: true,
+        result: { ...record, sequence: 0 }
+      })
+    ).toBe(false)
+    expect(
+      isOrchestrationLedgerWorkerResponse({
+        protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
+        id: 3,
+        operation: 'readAfter',
+        ok: true,
+        result: [{ arbitrary: true }]
+      })
+    ).toBe(false)
+    expect(
+      isOrchestrationLedgerWorkerResponse({
+        protocolVersion: ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION,
+        id: 4,
+        operation: 'close',
+        ok: true,
+        result: []
       })
     ).toBe(false)
   })

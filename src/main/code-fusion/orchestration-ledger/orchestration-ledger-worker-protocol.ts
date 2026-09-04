@@ -1,10 +1,14 @@
 import {
   ORCHESTRATION_LEDGER_AGGREGATE_TYPES,
+  type OrchestrationLedgerActor,
   type OrchestrationLedgerAggregateType,
   type OrchestrationLedgerReadOptions,
   type OrchestrationLedgerRecord
 } from '../../../shared/code-fusion/orchestration-ledger'
-import type { CoreOrchestrationLedgerEventInput } from '../../../shared/code-fusion/orchestration-ledger-core-events'
+import {
+  CORE_ORCHESTRATION_LEDGER_EVENTS,
+  type CoreOrchestrationLedgerEventInput
+} from '../../../shared/code-fusion/orchestration-ledger-core-events'
 
 export const ORCHESTRATION_LEDGER_WORKER_PROTOCOL_VERSION = 1 as const
 export const ORCHESTRATION_LEDGER_WORKER_REQUEST_TIMEOUT_MS = 15_000
@@ -91,6 +95,13 @@ const OPERATIONS = new Set<OrchestrationLedgerWorkerOperation>([
   'close'
 ])
 const AGGREGATE_TYPES = new Set<string>(ORCHESTRATION_LEDGER_AGGREGATE_TYPES)
+const CORE_EVENT_TYPES = new Set<string>(Object.keys(CORE_ORCHESTRATION_LEDGER_EVENTS))
+const ACTOR_KINDS = new Set<OrchestrationLedgerActor['kind']>([
+  'human',
+  'agent',
+  'system',
+  'external'
+])
 
 export function isOrchestrationLedgerWorkerData(
   value: unknown
@@ -160,7 +171,9 @@ export function isOrchestrationLedgerWorkerResponse(
     return false
   }
   if (typeof value.ok !== 'boolean') return false
-  if (value.ok) return Object.prototype.hasOwnProperty.call(value, 'result')
+  if (value.ok) {
+    return isSuccessResult(value.operation as OrchestrationLedgerWorkerOperation, value.result)
+  }
   return (
     isRecord(value.error) &&
     isNonEmptyString(value.error.name) &&
@@ -169,14 +182,69 @@ export function isOrchestrationLedgerWorkerResponse(
   )
 }
 
+function isSuccessResult(
+  operation: OrchestrationLedgerWorkerOperation,
+  result: unknown
+): result is OrchestrationLedgerWorkerSuccessResult {
+  switch (operation) {
+    case 'getSchemaVersion':
+      return Number.isSafeInteger(result) && Number(result) > 0
+    case 'getLatestSequence':
+      return Number.isSafeInteger(result) && Number(result) >= 0
+    case 'appendCore':
+      return isLedgerRecord(result)
+    case 'appendCoreMany':
+    case 'readAfter':
+    case 'readAggregate':
+    case 'readProject':
+      return Array.isArray(result) && result.every(isLedgerRecord)
+    case 'close':
+      return result === null
+  }
+}
+
+function isLedgerRecord(value: unknown): value is OrchestrationLedgerRecord {
+  if (!isRecord(value)) return false
+  if (!Number.isSafeInteger(value.sequence) || Number(value.sequence) <= 0) return false
+  if (!isNonEmptyString(value.eventId)) return false
+  if (!isNonEmptyString(value.occurredAt)) return false
+  if (typeof value.aggregateType !== 'string' || !AGGREGATE_TYPES.has(value.aggregateType)) {
+    return false
+  }
+  if (!isNonEmptyString(value.aggregateId) || !isNonEmptyString(value.eventType)) return false
+  if (!Object.prototype.hasOwnProperty.call(value, 'payload')) return false
+  if (!isOptionalNonEmptyString(value.projectId)) return false
+  if (!isOptionalActor(value.actor)) return false
+  return (
+    isOptionalNonEmptyString(value.source) &&
+    isOptionalNonEmptyString(value.correlationId) &&
+    isOptionalNonEmptyString(value.causationId)
+  )
+}
+
 function isCoreEventInput(value: unknown): value is CoreOrchestrationLedgerEventInput {
   if (!isRecord(value)) return false
+  if (!isNonEmptyString(value.eventId)) return false
+  if (!isNonEmptyString(value.occurredAt)) return false
+  if (!isNonEmptyString(value.aggregateId)) return false
+  if (typeof value.eventType !== 'string' || !CORE_EVENT_TYPES.has(value.eventType)) return false
+  if (!Object.prototype.hasOwnProperty.call(value, 'payload')) return false
+  if (!isOptionalNonEmptyString(value.projectId)) return false
+  if (!isOptionalActor(value.actor)) return false
   return (
-    isNonEmptyString(value.eventId) &&
-    isNonEmptyString(value.occurredAt) &&
-    isNonEmptyString(value.aggregateId) &&
-    isNonEmptyString(value.eventType) &&
-    Object.prototype.hasOwnProperty.call(value, 'payload')
+    isOptionalNonEmptyString(value.source) &&
+    isOptionalNonEmptyString(value.correlationId) &&
+    isOptionalNonEmptyString(value.causationId)
+  )
+}
+
+function isOptionalActor(value: unknown): boolean {
+  if (value === undefined) return true
+  if (!isRecord(value)) return false
+  return (
+    typeof value.kind === 'string' &&
+    ACTOR_KINDS.has(value.kind as OrchestrationLedgerActor['kind']) &&
+    isOptionalNonEmptyString(value.id)
   )
 }
 
@@ -188,6 +256,10 @@ function isReadOptions(value: unknown): boolean {
       (Number.isSafeInteger(value.afterSequence) && Number(value.afterSequence) >= 0)) &&
     (value.limit === undefined || (Number.isSafeInteger(value.limit) && Number(value.limit) > 0))
   )
+}
+
+function isOptionalNonEmptyString(value: unknown): boolean {
+  return value === undefined || isNonEmptyString(value)
 }
 
 function isNonEmptyString(value: unknown): value is string {
