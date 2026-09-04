@@ -95,6 +95,20 @@ describe('NativNativeIntelligenceProvider', () => {
     expect(health.message).toContain('connection refused')
   })
 
+  it('redacts bearer and query-style credentials from health failures', async () => {
+    const { client } = makeHttpClient(async () => {
+      throw new Error('Bearer local-secret token=abc api_key=xyz authorization=raw')
+    })
+    const provider = new NativNativeIntelligenceProvider({ httpClient: client })
+
+    const health = await provider.getHealth()
+
+    expect(health.state).toBe('unavailable')
+    expect(health.message).toBe(
+      'Bearer [redacted] token=[redacted] api_key=[redacted] authorization=[redacted]'
+    )
+  })
+
   it('reports a reachable non-2xx runtime as degraded', async () => {
     const { client } = makeHttpClient(async () => new Response('busy', { status: 503 }))
     const provider = new NativNativeIntelligenceProvider({ httpClient: client })
@@ -114,6 +128,32 @@ describe('NativNativeIntelligenceProvider', () => {
     )
   })
 
+  it('rejects declared response bodies above the safe byte limit', async () => {
+    const { client } = makeHttpClient(
+      async () =>
+        new Response('small', {
+          status: 200,
+          headers: { 'content-length': String(1 * 1024 * 1024 + 1) }
+        })
+    )
+    const provider = new NativNativeIntelligenceProvider({ httpClient: client })
+
+    await expect(provider.listModels()).rejects.toThrow(
+      'Nativ response exceeded the safe body-size limit'
+    )
+  })
+
+  it('rejects streamed response bodies above the safe byte limit', async () => {
+    const { client } = makeHttpClient(
+      async () => new Response('x'.repeat(1 * 1024 * 1024 + 1), { status: 200 })
+    )
+    const provider = new NativNativeIntelligenceProvider({ httpClient: client })
+
+    await expect(provider.listModels()).rejects.toThrow(
+      'Nativ response exceeded the safe body-size limit'
+    )
+  })
+
   it('rejects malformed model inventory payloads', async () => {
     const { client } = makeHttpClient(async () => new Response('{broken', { status: 200 }))
     const provider = new NativNativeIntelligenceProvider({ httpClient: client })
@@ -123,10 +163,31 @@ describe('NativNativeIntelligenceProvider', () => {
     )
   })
 
-  it('ignores malformed model entries without manufacturing identifiers', async () => {
+  it('rejects model inventories above the safe entry limit', async () => {
     const { client } = makeHttpClient(async () =>
       Response.json({
-        data: [{ id: '' }, { id: 42 }, null, { id: 'local/model-a' }, { id: 'model-b' }]
+        data: Array.from({ length: 4_097 }, (_, index) => ({ id: `local/model-${index}` }))
+      })
+    )
+    const provider = new NativNativeIntelligenceProvider({ httpClient: client })
+
+    await expect(provider.listModels()).rejects.toThrow(
+      'Nativ model inventory exceeded the safe entry limit'
+    )
+  })
+
+  it('deduplicates identifiers and ignores malformed or oversized entries', async () => {
+    const { client } = makeHttpClient(async () =>
+      Response.json({
+        data: [
+          { id: '' },
+          { id: 42 },
+          null,
+          { id: 'local/model-a' },
+          { id: ' local/model-a ' },
+          { id: 'x'.repeat(513) },
+          { id: 'model-b' }
+        ]
       })
     )
     const provider = new NativNativeIntelligenceProvider({ httpClient: client })
