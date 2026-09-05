@@ -3,6 +3,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ConfirmationDialogProvider } from './components/confirmation-dialog'
 import { BrowserWebAuthnAccountDialog } from './components/browser-webauthn-account-dialog'
+import { NativeRuntimeAlphaDialog } from './components/code-fusion/NativeRuntimeAlphaDialog'
 import { DocPreviewExternalLinkConfirmation } from './components/browser-pane/workspace-doc/doc-preview-external-link-confirmation'
 import { LinkRoutingPreferenceDialogProvider } from './components/link-routing-preference-dialog'
 import { SkillFreshnessNudge } from './components/skills/SkillFreshnessNudge'
@@ -99,6 +100,7 @@ function App(): React.JSX.Element {
               floatingWorkspace={floatingWorkspace}
               onboardingGate={onboardingGate}
             />
+            <NativeRuntimeAlphaDialog />
             <BrowserWebAuthnAccountDialog />
           </LinkRoutingPreferenceDialogProvider>
         </ConfirmationDialogProvider>

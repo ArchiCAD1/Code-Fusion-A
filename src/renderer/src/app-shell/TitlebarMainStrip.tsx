@@ -1,6 +1,7 @@
-import { Minimize2, PanelRight } from 'lucide-react'
+import { Cpu, Minimize2, PanelRight } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { OPEN_NATIVE_RUNTIME_ALPHA_EVENT } from '@/constants/code-fusion'
 import { TOGGLE_TERMINAL_PANE_EXPAND_EVENT } from '@/constants/terminal'
 import { ActivityTitlebarControls } from '../components/activity/ActivityTitlebarControls'
 import { useShortcutLabel } from '../hooks/useShortcutLabel'
@@ -44,6 +45,10 @@ export function TitlebarMainStrip({ layout }: { layout: AppChromeLayout }): Reac
     )
   }
 
+  const handleOpenNativeRuntime = (): void => {
+    window.dispatchEvent(new CustomEvent(OPEN_NATIVE_RUNTIME_ALPHA_EVENT))
+  }
+
   return (
     <>
       {layout.activeView === 'activity' ? (
@@ -71,6 +76,21 @@ export function TitlebarMainStrip({ layout }: { layout: AppChromeLayout }): Reac
           </TooltipContent>
         </Tooltip>
       )}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            className="titlebar-icon-button"
+            onClick={handleOpenNativeRuntime}
+            aria-label="Models and native runtime"
+            data-testid="code-fusion-models-button"
+          >
+            <Cpu size={14} />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" sideOffset={6}>
+          Models &amp; native runtime
+        </TooltipContent>
+      </Tooltip>
       {/* Why: the open right sidebar's header renders its own close button, so hide this duplicate. */}
       {layout.showRightSidebarControls && !layout.rightSidebarOpen ? <RightSidebarToggle /> : null}
       {/* Why: reserve space so the Windows/Linux window-controls overlay doesn't obscure content. */}
