@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
-import { Cpu, RefreshCw } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Cpu, RefreshCw, ShieldCheck } from 'lucide-react'
+import type { NativeIntelligenceCertificationReport } from '../../../../shared/code-fusion/native-intelligence-certification'
 import { useAppStore } from '@/store'
 import { Button } from '../ui/button'
 import { SettingsSubsectionHeader } from './SettingsFormControls'
@@ -10,6 +11,11 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
   const error = useAppStore((state) => state.nativeIntelligenceError)
   const refreshing = useAppStore((state) => state.nativeIntelligenceRefreshing)
   const refresh = useAppStore((state) => state.refreshNativeIntelligenceSnapshot)
+  const [certifying, setCertifying] = useState(false)
+  const [certification, setCertification] = useState<NativeIntelligenceCertificationReport | null>(
+    null
+  )
+  const [certificationError, setCertificationError] = useState<string | null>(null)
 
   const presentation = selectNativeIntelligencePresentation({
     nativeIntelligenceSnapshot: snapshot,
@@ -20,6 +26,22 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  const runCertification = async (): Promise<void> => {
+    if (certifying) return
+    setCertifying(true)
+    setCertificationError(null)
+    try {
+      const report = await window.api.nativeIntelligence.runReadCertification()
+      setCertification(report)
+      await refresh()
+    } catch (certificationFailure) {
+      console.error('Failed to run native intelligence certification:', certificationFailure)
+      setCertificationError('Certification command failed. Check the local runtime and try again.')
+    } finally {
+      setCertifying(false)
+    }
+  }
 
   return (
     <section className="space-y-3" data-testid="code-fusion-native-runtime-section">
@@ -59,16 +81,31 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            className="shrink-0 gap-1.5"
-            disabled={refreshing}
-            onClick={() => void refresh()}
-          >
-            <RefreshCw className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
-            {refreshing ? 'Checking…' : 'Refresh'}
-          </Button>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={refreshing}
+              onClick={() => void refresh()}
+            >
+              <RefreshCw
+                className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`}
+                aria-hidden="true"
+              />
+              {refreshing ? 'Checking…' : 'Refresh'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={certifying}
+              onClick={() => void runCertification()}
+            >
+              <ShieldCheck className="size-3.5" aria-hidden="true" />
+              {certifying ? 'Running…' : 'Run Certification'}
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-3 divide-x divide-border/60 border-b border-border/60">
@@ -150,6 +187,33 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
             )}
           </div>
 
+          {certification || certificationError ? (
+            <div
+              className="rounded-md border border-border/70 bg-muted/20 px-3 py-2.5"
+              data-testid="code-fusion-native-certification-result"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-medium">Mounted Runtime Certification</p>
+                {certification ? <CertificationPill result={certification.result} /> : null}
+              </div>
+              {certificationError ? (
+                <p className="mt-1.5 text-xs text-muted-foreground">{certificationError}</p>
+              ) : null}
+              {certification ? (
+                <div className="mt-2 space-y-1.5">
+                  {certification.checks.map((check) => (
+                    <div key={check.id} className="flex items-start justify-between gap-3 text-xs">
+                      <span className="font-medium">{certificationCheckLabel(check.id)}</span>
+                      <span className="max-w-[65%] text-right text-muted-foreground">
+                        {check.status.toUpperCase()} · {check.detail}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
             Alpha safety boundary: this surface is read-only. Model download, load, unload, removal,
             credential editing, and process control remain disabled until mounted runtime certification
@@ -176,6 +240,25 @@ function RuntimeStatePill({ kind }: { kind: string }): React.JSX.Element {
       {kind}
     </span>
   )
+}
+
+function CertificationPill({ result }: { result: 'pass' | 'fail' }): React.JSX.Element {
+  return (
+    <span className="rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+      {result}
+    </span>
+  )
+}
+
+function certificationCheckLabel(id: string): string {
+  switch (id) {
+    case 'runtime-ready':
+      return 'Runtime readiness'
+    case 'model-inventory':
+      return 'Model inventory'
+    default:
+      return id
+  }
 }
 
 function formatTimestamp(value: string): string {
