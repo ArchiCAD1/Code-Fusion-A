@@ -10,6 +10,10 @@ import { getMainHttpClient, type MainHttpClient } from '../network/http-client'
 
 const DEFAULT_NATIV_BASE_URL = 'http://127.0.0.1:8080/'
 const DEFAULT_TIMEOUT_MS = 3_000
+const MAX_RESPONSE_BODY_BYTES = 1 * 1024 * 1024
+const MAX_MODEL_INVENTORY_ENTRIES = 4_096
+const MAX_MODEL_ID_LENGTH = 512
+const MAX_ERROR_MESSAGE_LENGTH = 1_000
 
 const READ_ONLY_CAPABILITIES: readonly NativeIntelligenceCapability[] = [
   'chat',
@@ -121,7 +125,7 @@ export class NativNativeIntelligenceProvider implements NativeIntelligenceProvid
         cache: 'no-store',
         signal: requestAbort.signal
       })
-      const body = await response.text()
+      const body = await readResponseTextBounded(response, MAX_RESPONSE_BODY_BYTES)
       return { response, body }
     } finally {
       requestAbort.cleanup()
@@ -182,6 +186,50 @@ function createRequestAbort(
   }
 }
 
+async function readResponseTextBounded(response: Response, maxBytes: number): Promise<string> {
+  const declaredLength = response.headers.get('content-length')
+  if (declaredLength !== null) {
+    const parsedLength = Number(declaredLength)
+    if (Number.isFinite(parsedLength) && parsedLength > maxBytes) {
+      await cancelResponseBody(response)
+      throw new Error('Nativ response exceeded the safe body-size limit')
+    }
+  }
+
+  if (!response.body) {
+    return ''
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let totalBytes = 0
+  let text = ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      totalBytes += value.byteLength
+      if (totalBytes > maxBytes) {
+        await reader.cancel().catch(() => undefined)
+        throw new Error('Nativ response exceeded the safe body-size limit')
+      }
+      text += decoder.decode(value, { stream: true })
+    }
+    text += decoder.decode()
+    return text
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+async function cancelResponseBody(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel()
+  } catch {
+    // Best-effort cancellation only. The caller still fails closed on the declared size.
+  }
+}
+
 function parseOpenAiModelList(body: string): readonly OpenAiModelEntry[] {
   let payload: unknown
   try {
@@ -193,16 +241,22 @@ function parseOpenAiModelList(body: string): readonly OpenAiModelEntry[] {
   if (!isRecord(payload) || !Array.isArray(payload.data)) {
     throw new Error('Nativ model inventory returned an unexpected payload')
   }
+  if (payload.data.length > MAX_MODEL_INVENTORY_ENTRIES) {
+    throw new Error('Nativ model inventory exceeded the safe entry limit')
+  }
 
   const models: OpenAiModelEntry[] = []
+  const seenModelIds = new Set<string>()
   for (const candidate of payload.data) {
     if (!isRecord(candidate) || typeof candidate.id !== 'string') {
       continue
     }
     const id = candidate.id.trim()
-    if (id) {
-      models.push({ id })
+    if (!id || id.length > MAX_MODEL_ID_LENGTH || seenModelIds.has(id)) {
+      continue
     }
+    seenModelIds.add(id)
+    models.push({ id })
   }
   return models
 }
@@ -217,8 +271,10 @@ function modelDisplayName(modelId: string): string {
 }
 
 function safeErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message.replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
-  }
-  return 'Native intelligence runtime is unavailable'
+  const rawMessage = error instanceof Error ? error.message : String(error)
+  const normalized = rawMessage.trim() || 'Native intelligence runtime is unavailable'
+  return normalized
+    .slice(0, MAX_ERROR_MESSAGE_LENGTH)
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/((?:api[_-]?key|token|authorization)=)[^&\s]+/gi, '$1[redacted]')
 }
