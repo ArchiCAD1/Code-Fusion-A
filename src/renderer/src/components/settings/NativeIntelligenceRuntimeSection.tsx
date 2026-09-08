@@ -2,9 +2,15 @@ import { useEffect, useState } from 'react'
 import { Cpu, RefreshCw, ShieldCheck } from 'lucide-react'
 import type { NativeIntelligenceCertificationReport } from '../../../../shared/code-fusion/native-intelligence-certification'
 import { useAppStore } from '@/store'
+import { getIntlLocale, translate } from '@/i18n/i18n'
 import { Button } from '../ui/button'
 import { SettingsSubsectionHeader } from './SettingsFormControls'
 import { selectNativeIntelligencePresentation } from '@/store/slices/native-intelligence-presentation'
+
+// Alpha-only copy uses dynamic keys with explicit English fallbacks. This keeps the temporary
+// testing surface inside the localization boundary without promoting pre-release copy into the
+// stable release catalogs before the Code Fusion public UI vocabulary is locked.
+const NATIVE_RUNTIME_I18N_PREFIX = 'codeFusion.alpha.nativeRuntime'
 
 export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
   const snapshot = useAppStore((state) => state.nativeIntelligenceSnapshot)
@@ -37,7 +43,12 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
       await refresh()
     } catch (certificationFailure) {
       console.error('Failed to run native intelligence certification:', certificationFailure)
-      setCertificationError('Certification command failed. Check the local runtime and try again.')
+      setCertificationError(
+        translate(
+          `${NATIVE_RUNTIME_I18N_PREFIX}.certificationCommandFailed`,
+          'Certification command failed. Check the local runtime and try again.'
+        )
+      )
     } finally {
       setCertifying(false)
     }
@@ -46,8 +57,11 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
   return (
     <section className="space-y-3" data-testid="code-fusion-native-runtime-section">
       <SettingsSubsectionHeader
-        title="Local AI Runtime"
-        description="Read-only Code Fusion alpha connection to the native model runtime."
+        title={translate(`${NATIVE_RUNTIME_I18N_PREFIX}.title`, 'Local AI Runtime')}
+        description={translate(
+          `${NATIVE_RUNTIME_I18N_PREFIX}.description`,
+          'Read-only Code Fusion alpha connection to the native model runtime.'
+        )}
       />
 
       <div className="rounded-lg border border-border/70 bg-card/40">
@@ -62,7 +76,7 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
                 <RuntimeStatePill kind={presentation.kind} />
                 {presentation.isStale ? (
                   <span className="rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    stale
+                    {translate(`${NATIVE_RUNTIME_I18N_PREFIX}.stale`, 'stale')}
                   </span>
                 ) : null}
               </div>
@@ -75,7 +89,12 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
                 <p className="mt-1 text-[11px] text-muted-foreground/80">
                   {snapshot.health.runtimeName}
                   {snapshot.health.runtimeVersion ? ` · ${snapshot.health.runtimeVersion}` : ''}
-                  {' · '}protocol v{snapshot.health.protocolVersion}
+                  {' · '}
+                  {translate(
+                    `${NATIVE_RUNTIME_I18N_PREFIX}.protocolVersion`,
+                    'protocol v{{version}}',
+                    { version: snapshot.health.protocolVersion }
+                  )}
                 </p>
               ) : null}
             </div>
@@ -93,7 +112,9 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
                 className={`size-3.5 ${refreshing ? 'animate-spin' : ''}`}
                 aria-hidden="true"
               />
-              {refreshing ? 'Checking…' : 'Refresh'}
+              {refreshing
+                ? translate(`${NATIVE_RUNTIME_I18N_PREFIX}.checking`, 'Checking…')
+                : translate(`${NATIVE_RUNTIME_I18N_PREFIX}.refresh`, 'Refresh')}
             </Button>
             <Button
               variant="outline"
@@ -103,21 +124,32 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
               onClick={() => void runCertification()}
             >
               <ShieldCheck className="size-3.5" aria-hidden="true" />
-              {certifying ? 'Running…' : 'Run Certification'}
+              {certifying
+                ? translate(`${NATIVE_RUNTIME_I18N_PREFIX}.running`, 'Running…')
+                : translate(`${NATIVE_RUNTIME_I18N_PREFIX}.runCertification`, 'Run Certification')}
             </Button>
           </div>
         </div>
 
         <div className="grid grid-cols-3 divide-x divide-border/60 border-b border-border/60">
-          <Metric label="Models" value={presentation.modelCount} />
-          <Metric label="Installed" value={presentation.installedModelCount} />
-          <Metric label="Loaded" value={presentation.loadedModelCount} />
+          <Metric
+            label={translate(`${NATIVE_RUNTIME_I18N_PREFIX}.models`, 'Models')}
+            value={presentation.modelCount}
+          />
+          <Metric
+            label={translate(`${NATIVE_RUNTIME_I18N_PREFIX}.installed`, 'Installed')}
+            value={presentation.installedModelCount}
+          />
+          <Metric
+            label={translate(`${NATIVE_RUNTIME_I18N_PREFIX}.loaded`, 'Loaded')}
+            value={presentation.loadedModelCount}
+          />
         </div>
 
         <div className="space-y-3 px-4 py-3">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Capabilities
+              {translate(`${NATIVE_RUNTIME_I18N_PREFIX}.capabilities`, 'Capabilities')}
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {snapshot?.health.capabilities.length ? (
@@ -130,7 +162,12 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
                   </span>
                 ))
               ) : (
-                <span className="text-xs text-muted-foreground">No runtime capabilities reported.</span>
+                <span className="text-xs text-muted-foreground">
+                  {translate(
+                    `${NATIVE_RUNTIME_I18N_PREFIX}.noCapabilities`,
+                    'No runtime capabilities reported.'
+                  )}
+                </span>
               )}
             </div>
           </div>
@@ -138,25 +175,32 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
           <div>
             <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Model inventory
+                {translate(`${NATIVE_RUNTIME_I18N_PREFIX}.modelInventory`, 'Model inventory')}
               </p>
               {snapshot ? (
                 <span className="text-[11px] text-muted-foreground">
-                  Updated {formatTimestamp(snapshot.refreshedAt)}
+                  {translate(`${NATIVE_RUNTIME_I18N_PREFIX}.updatedAt`, 'Updated {{time}}', {
+                    time: formatTimestamp(snapshot.refreshedAt)
+                  })}
                 </span>
               ) : null}
             </div>
 
             {!snapshot ? (
               <p className="mt-2 text-xs text-muted-foreground">
-                Refresh to check the local runtime and discover installed models.
+                {translate(
+                  `${NATIVE_RUNTIME_I18N_PREFIX}.refreshToDiscover`,
+                  'Refresh to check the local runtime and discover installed models.'
+                )}
               </p>
             ) : snapshot.modelInventoryError ? (
               <p className="mt-2 rounded-md border border-border/70 bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
                 {snapshot.modelInventoryError}
               </p>
             ) : snapshot.models.length === 0 ? (
-              <p className="mt-2 text-xs text-muted-foreground">No local models were reported.</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {translate(`${NATIVE_RUNTIME_I18N_PREFIX}.noModels`, 'No local models were reported.')}
+              </p>
             ) : (
               <div className="mt-2 divide-y divide-border/60 overflow-hidden rounded-md border border-border/70">
                 {snapshot.models.map((model) => (
@@ -193,7 +237,12 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
               data-testid="code-fusion-native-certification-result"
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-medium">Mounted Runtime Certification</p>
+                <p className="text-xs font-medium">
+                  {translate(
+                    `${NATIVE_RUNTIME_I18N_PREFIX}.mountedCertification`,
+                    'Mounted Runtime Certification'
+                  )}
+                </p>
                 {certification ? <CertificationPill result={certification.result} /> : null}
               </div>
               {certificationError ? (
@@ -205,7 +254,7 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
                     <div key={check.id} className="flex items-start justify-between gap-3 text-xs">
                       <span className="font-medium">{certificationCheckLabel(check.id)}</span>
                       <span className="max-w-[65%] text-right text-muted-foreground">
-                        {check.status.toUpperCase()} · {check.detail}
+                        {certificationStatusLabel(check.status)} · {check.detail}
                       </span>
                     </div>
                   ))}
@@ -215,9 +264,10 @@ export function NativeIntelligenceRuntimeSection(): React.JSX.Element {
           ) : null}
 
           <div className="rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-            Alpha safety boundary: this surface is read-only. Model download, load, unload, removal,
-            credential editing, and process control remain disabled until mounted runtime certification
-            passes on macOS.
+            {translate(
+              `${NATIVE_RUNTIME_I18N_PREFIX}.safetyBoundary`,
+              'Alpha safety boundary: this surface is read-only. Model download, load, unload, removal, credential editing, and process control remain disabled until mounted runtime certification passes on macOS.'
+            )}
           </div>
         </div>
       </div>
@@ -245,7 +295,7 @@ function RuntimeStatePill({ kind }: { kind: string }): React.JSX.Element {
 function CertificationPill({ result }: { result: 'pass' | 'fail' }): React.JSX.Element {
   return (
     <span className="rounded-full border border-border/70 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-      {result}
+      {certificationStatusLabel(result)}
     </span>
   )
 }
@@ -253,22 +303,32 @@ function CertificationPill({ result }: { result: 'pass' | 'fail' }): React.JSX.E
 function certificationCheckLabel(id: string): string {
   switch (id) {
     case 'runtime-ready':
-      return 'Runtime readiness'
+      return translate(`${NATIVE_RUNTIME_I18N_PREFIX}.runtimeReadiness`, 'Runtime readiness')
     case 'model-inventory':
-      return 'Model inventory'
+      return translate(`${NATIVE_RUNTIME_I18N_PREFIX}.modelInventory`, 'Model inventory')
     default:
       return id
   }
 }
 
+function certificationStatusLabel(status: 'pass' | 'fail'): string {
+  return status === 'pass'
+    ? translate(`${NATIVE_RUNTIME_I18N_PREFIX}.pass`, 'PASS')
+    : translate(`${NATIVE_RUNTIME_I18N_PREFIX}.fail`, 'FAIL')
+}
+
 function formatTimestamp(value: string): string {
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'unknown'
-  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  if (Number.isNaN(date.getTime())) {
+    return translate(`${NATIVE_RUNTIME_I18N_PREFIX}.unknown`, 'unknown')
+  }
+  return date.toLocaleTimeString(getIntlLocale(), { hour: 'numeric', minute: '2-digit' })
 }
 
 function formatBytes(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return 'size unknown'
+  if (!Number.isFinite(value) || value <= 0) {
+    return translate(`${NATIVE_RUNTIME_I18N_PREFIX}.sizeUnknown`, 'size unknown')
+  }
   const units = ['B', 'KB', 'MB', 'GB', 'TB'] as const
   const exponent = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1)
   const scaled = value / 1024 ** exponent
