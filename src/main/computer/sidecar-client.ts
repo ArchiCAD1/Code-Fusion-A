@@ -91,9 +91,14 @@ export async function callComputerSidecarAction(
   )
 }
 
-export function resetComputerSidecarForTest(): void {
-  sidecar?.shutdown()
+export function stopComputerSidecarForHumanControl(): void {
+  const activeSidecar = sidecar
   sidecar = null
+  activeSidecar?.shutdown()
+}
+
+export function resetComputerSidecarForTest(): void {
+  stopComputerSidecarForHumanControl()
   resetComputerControlGateForTest()
 }
 
