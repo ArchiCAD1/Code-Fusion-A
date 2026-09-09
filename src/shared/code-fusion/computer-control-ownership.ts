@@ -15,6 +15,14 @@ export interface ComputerControlState {
   owner: ComputerControlActor | null
 }
 
+export type ComputerControlPublicOwner = 'automation' | 'human' | null
+
+export interface ComputerControlPublicState {
+  version: typeof COMPUTER_CONTROL_OWNERSHIP_VERSION
+  epoch: number
+  owner: ComputerControlPublicOwner
+}
+
 export type ComputerControlTransitionReason =
   | 'acquired'
   | 'already-owner'
@@ -35,6 +43,13 @@ export interface ComputerControlTransitionDecision {
   nextState: ComputerControlState
 }
 
+export interface ComputerControlPublicTransitionDecision {
+  allowed: boolean
+  changed: boolean
+  reason: ComputerControlTransitionReason
+  state: ComputerControlPublicState
+}
+
 export type ComputerActionControlReason = 'owner' | 'unowned' | 'owned-by-other' | 'invalid-actor'
 
 export interface ComputerActionControlDecision {
@@ -47,6 +62,25 @@ export function createComputerControlState(): ComputerControlState {
     version: COMPUTER_CONTROL_OWNERSHIP_VERSION,
     epoch: 0,
     owner: null
+  }
+}
+
+export function toComputerControlPublicState(state: ComputerControlState): ComputerControlPublicState {
+  return {
+    version: state.version,
+    epoch: state.epoch,
+    owner: state.owner === null ? null : state.owner.kind === 'human' ? 'human' : 'automation'
+  }
+}
+
+export function toComputerControlPublicTransition(
+  transition: ComputerControlTransitionDecision
+): ComputerControlPublicTransitionDecision {
+  return {
+    allowed: transition.allowed,
+    changed: transition.changed,
+    reason: transition.reason,
+    state: toComputerControlPublicState(transition.nextState)
   }
 }
 
