@@ -11,6 +11,7 @@ import {
   takeHumanComputerControl
 } from './computer-control-gate'
 import { RuntimeClientError } from './runtime-client-error'
+import { stopComputerSidecarForHumanControl } from './sidecar-client'
 
 const COMPUTER_CONTROL_GET_STATE = 'computerControl:getState'
 const COMPUTER_CONTROL_TAKE = 'computerControl:take'
@@ -28,7 +29,12 @@ export function registerComputerControlIpcHandlers(): void {
 function takeForRenderer(event: IpcMainInvokeEvent): ComputerControlPublicTransitionDecision {
   const humanId = rendererHumanId(event.sender.id)
   const transition = takeHumanComputerControl(humanId)
-  if (transition.allowed) installDestroyedCleanup(event.sender, humanId)
+  if (transition.allowed) {
+    if (transition.changed && transition.nextState.owner?.kind === 'human') {
+      stopComputerSidecarForHumanControl()
+    }
+    installDestroyedCleanup(event.sender, humanId)
+  }
   return toComputerControlPublicTransition(transition)
 }
 
