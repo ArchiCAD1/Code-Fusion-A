@@ -16,7 +16,7 @@ export function getComputerControlState(): ComputerControlState {
   return cloneState(state)
 }
 
-export function authorizeAutomatedComputerAction(): void {
+export function authorizeAutomatedComputerUse(): void {
   if (state.owner === null) {
     const acquired = acquireComputerControl(state, AUTOMATION_ACTOR)
     if (!acquired.allowed) {
