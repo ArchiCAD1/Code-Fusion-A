@@ -1,45 +1,42 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
-  authorizeAutomatedComputerAction,
+  authorizeAutomatedComputerUse,
   getComputerControlState,
   releaseHumanComputerControl,
   resetComputerControlGateForTest,
   takeHumanComputerControl
 } from './computer-control-gate'
-import { RuntimeClientError } from './runtime-client-error'
 
 describe('computer control execution gate', () => {
   beforeEach(() => resetComputerControlGateForTest())
 
-  it('lazily grants automation control without changing existing action flow', () => {
+  it('lazily grants automation control without changing existing computer-use flow', () => {
     expect(getComputerControlState().owner).toBeNull()
 
-    expect(() => authorizeAutomatedComputerAction()).not.toThrow()
+    expect(() => authorizeAutomatedComputerUse()).not.toThrow()
     const state = getComputerControlState()
     expect(state.owner).toEqual({
       kind: 'agent',
       id: 'code-fusion-computer-automation'
     })
 
-    expect(() => authorizeAutomatedComputerAction()).not.toThrow()
+    expect(() => authorizeAutomatedComputerUse()).not.toThrow()
     expect(getComputerControlState().epoch).toBe(state.epoch)
   })
 
   it('blocks automation while a human owns control', () => {
-    authorizeAutomatedComputerAction()
+    authorizeAutomatedComputerUse()
     const takeover = takeHumanComputerControl('local-human')
 
     expect(takeover).toMatchObject({ allowed: true, changed: true, reason: 'human-takeover' })
-    expect(() => authorizeAutomatedComputerAction()).toThrowError(
-      expect.objectContaining<Partial<RuntimeClientError>>({
-        code: 'computer_control_owned_by_human'
-      })
+    expect(() => authorizeAutomatedComputerUse()).toThrowError(
+      expect.objectContaining({ code: 'computer_control_owned_by_human' })
     )
   })
 
   it('uses the ownership epoch to reject stale release attempts', () => {
-    authorizeAutomatedComputerAction()
+    authorizeAutomatedComputerUse()
     const staleEpoch = getComputerControlState().epoch
     takeHumanComputerControl('local-human')
 
@@ -52,7 +49,7 @@ describe('computer control execution gate', () => {
   })
 
   it('requires the owning human to release control', () => {
-    authorizeAutomatedComputerAction()
+    authorizeAutomatedComputerUse()
     takeHumanComputerControl('local-human')
     const epoch = getComputerControlState().epoch
 
@@ -69,17 +66,17 @@ describe('computer control execution gate', () => {
   })
 
   it('lets automation resume after the human releases control', () => {
-    authorizeAutomatedComputerAction()
+    authorizeAutomatedComputerUse()
     takeHumanComputerControl('local-human')
     const epoch = getComputerControlState().epoch
     releaseHumanComputerControl('local-human', epoch)
 
-    expect(() => authorizeAutomatedComputerAction()).not.toThrow()
+    expect(() => authorizeAutomatedComputerUse()).not.toThrow()
     expect(getComputerControlState().owner?.kind).toBe('agent')
   })
 
   it('rejects malformed human identities without disturbing automation', () => {
-    authorizeAutomatedComputerAction()
+    authorizeAutomatedComputerUse()
 
     expect(takeHumanComputerControl('   ')).toMatchObject({
       allowed: false,
