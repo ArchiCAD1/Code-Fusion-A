@@ -1,9 +1,11 @@
 import { ipcMain } from 'electron'
+import { registerComputerControlIpcHandlers } from '../computer/computer-control-ipc'
 import { recoverLegacyWorkerTerminalsForRendererStartup } from './legacy-worker-renderer-recovery'
 import { logStartupMilestone } from './startup-diagnostics'
 import { mainProcessState as state } from './main-process-state'
 
 export function registerMainProcessIpcHandlers(): void {
+  registerComputerControlIpcHandlers()
   ipcMain.handle('app:awaitFirstWindowStartupServices', async () => {
     await Promise.all([
       state.firstWindowStartupServicesReady,

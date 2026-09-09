@@ -23,6 +23,34 @@ Code-Fusion-A is a GitHub-recognized fork of `stablyai/orca`. Code Fusion retain
 
 Code-Fusion-B is a GitHub-recognized fork of `Blaizzy/nativ`. Code Fusion will selectively adapt Nativ's native model-runtime, model-management, MLX, Hugging Face, system-monitoring, MCP, and local API architecture. The Nativ SwiftUI application shell is not intended to become a second user-facing Code Fusion application.
 
+## Additional reference donors
+
+### Radiant
+
+- Upstream: https://github.com/templetongroup/radiant
+- Reference baseline: `2e8852b4ce91f2ebc05258543bbac75c6b984d9a`
+- License: MIT
+- Copyright notice: Copyright (c) 2026 Templeton Technologies
+- Reference scope: local coding-harness architecture, provider-neutral conversations, agent-loop/context controls, tool safety, mobile patterns, and packaged-app/release verification.
+
+### OpenBot
+
+- Upstream: https://github.com/CopilotKit/OpenBot
+- Reference baseline: `06633a4b61c0794d97829c4d856ba4b2da869ab3`
+- License: MIT
+- Copyright notice: Copyright (c) 2026 CopilotKit
+- Reference scope: AG-UI coworker endpoints, action governance, fail-closed policy, per-agent computer isolation, human takeover, MCP grants, and audit trails.
+
+### CopilotKit
+
+- Upstream: https://github.com/CopilotKit/CopilotKit
+- Reference baseline: `b17e238aa31a7711879042d9e17fa5801bd40e58`
+- License: MIT
+- Copyright notice: Copyright (c) Atai Barkai
+- Reference scope: AG-UI client/frontend architecture, human-in-the-loop, shared agent/UI state, generative UI, and cross-surface agent interaction.
+
+These additional projects are reference donors, not required Code Fusion runtime dependencies. No source from them is copied by the reference-audit commit. Any later substantive source extraction must add an extraction-ledger row with its exact upstream path and commit.
+
 ## Provenance rules
 
 1. Preserve applicable upstream copyright and permission notices.
@@ -34,8 +62,11 @@ Code-Fusion-B is a GitHub-recognized fork of `Blaizzy/nativ`. Code Fusion will s
 
 ## Extraction ledger
 
-No substantive Nativ source has been extracted into Code-Fusion-A as of the Phase 0 foundation commit. Add entries here before or with the commit that introduces extracted/adapted source.
+No substantive Nativ, Radiant, OpenBot, or CopilotKit source has been extracted into Code-Fusion-A as of the reference-donor foundation commit. Architecture ideas and independently authored compatibility contracts are recorded as reference work, not copied source.
 
 | Upstream | Upstream commit | Original path | Code Fusion path | Adaptation | Status |
 | --- | --- | --- | --- | --- | --- |
 | Nativ | `64dadb98ee61c3687044d3cc54eebe3f5b36fbea` | — | — | Architecture/reference only | No source extracted |
+| Radiant | `2e8852b4ce91f2ebc05258543bbac75c6b984d9a` | — | — | Architecture/reference only | No source extracted |
+| OpenBot | `06633a4b61c0794d97829c4d856ba4b2da869ab3` | — | — | Architecture/reference only | No source extracted |
+| CopilotKit | `b17e238aa31a7711879042d9e17fa5801bd40e58` | — | — | Architecture/reference only | No source extracted |
