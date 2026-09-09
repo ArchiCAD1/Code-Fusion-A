@@ -9,7 +9,7 @@ import type {
   ComputerSnapshotResult
 } from '../../shared/runtime-types'
 import { normalizeComputerActionResult } from './computer-action-verification-normalization'
-import { authorizeAutomatedComputerAction, resetComputerControlGateForTest } from './computer-control-gate'
+import { authorizeAutomatedComputerUse, resetComputerControlGateForTest } from './computer-control-gate'
 import { validateComputerSidecarPasteText } from './computer-sidecar-paste-validation'
 import { RuntimeClientError } from './runtime-client-error'
 
@@ -52,6 +52,7 @@ let sidecar: ComputerSidecarProcess | null = null
 function ignoreStaleChildError(): void {}
 
 export async function callComputerSidecarListApps(): Promise<ComputerListAppsResult> {
+  authorizeAutomatedComputerUse()
   return (await getComputerSidecar().call('listApps', {})) as ComputerListAppsResult
 }
 
@@ -62,12 +63,14 @@ export async function callComputerSidecarCapabilities(): Promise<ComputerProvide
 export async function callComputerSidecarListWindows(
   params: unknown
 ): Promise<ComputerListWindowsResult> {
+  authorizeAutomatedComputerUse()
   return (await getComputerSidecar().call('listWindows', params)) as ComputerListWindowsResult
 }
 
 export async function callComputerSidecarSnapshot(
   params: unknown
 ): Promise<ComputerSnapshotResult> {
+  authorizeAutomatedComputerUse()
   return (await getComputerSidecar().call('getAppState', params)) as ComputerSnapshotResult
 }
 
@@ -78,7 +81,7 @@ export async function callComputerSidecarAction(
   >,
   params: unknown
 ): Promise<ComputerActionResult> {
-  authorizeAutomatedComputerAction()
+  authorizeAutomatedComputerUse()
   const validation = validateComputerSidecarPasteText(method, params)
   if (validation) {
     await validation
