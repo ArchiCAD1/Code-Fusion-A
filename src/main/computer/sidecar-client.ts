@@ -9,6 +9,7 @@ import type {
   ComputerSnapshotResult
 } from '../../shared/runtime-types'
 import { normalizeComputerActionResult } from './computer-action-verification-normalization'
+import { authorizeAutomatedComputerAction, resetComputerControlGateForTest } from './computer-control-gate'
 import { validateComputerSidecarPasteText } from './computer-sidecar-paste-validation'
 import { RuntimeClientError } from './runtime-client-error'
 
@@ -77,6 +78,7 @@ export async function callComputerSidecarAction(
   >,
   params: unknown
 ): Promise<ComputerActionResult> {
+  authorizeAutomatedComputerAction()
   const validation = validateComputerSidecarPasteText(method, params)
   if (validation) {
     await validation
@@ -89,6 +91,7 @@ export async function callComputerSidecarAction(
 export function resetComputerSidecarForTest(): void {
   sidecar?.shutdown()
   sidecar = null
+  resetComputerControlGateForTest()
 }
 
 function getComputerSidecar(): ComputerSidecarProcess {
